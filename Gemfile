@@ -1,4 +1,6 @@
 source "https://rubygems.org"
+gem 'em-http-request'
+gem 'em-synchrony'
 
 group :development, :test do
   gem 'rake'

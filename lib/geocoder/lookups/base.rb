@@ -1,7 +1,8 @@
 require 'net/http'
 require 'net/https'
 require 'uri'
-
+require 'em-synchrony'
+require 'em-synchrony/em-http'
 unless defined?(ActiveSupport::JSON)
   begin
     require 'rubygems' # for Ruby 1.8
@@ -85,7 +86,12 @@ module Geocoder
       ##
       # Object used to make HTTP requests.
       #
-      def http_client
+      def http_client         
+        if configuration.use_em
+          HTTPI.adapter = :em_http  
+        else
+          HTTPI.adapter = :net_http
+        end
         protocol = "http#{'s' if configuration.use_https}"
         proxy_name = "#{protocol}_proxy"
         if proxy = configuration.send(proxy_name)
@@ -98,7 +104,7 @@ module Geocoder
           end
           Net::HTTP::Proxy(uri.host, uri.port, uri.user, uri.password)
         else
-          Net::HTTP
+          HTTPI
         end
       end
 
@@ -193,7 +199,7 @@ module Geocoder
         else
           check_api_key_configuration!(query)
           response = make_api_request(query)
-          body = response.body
+          body = response.response
           if cache and (200..399).include?(response.code.to_i)
             cache[key] = body
           end
@@ -207,12 +213,8 @@ module Geocoder
       # return the response object.
       #
       def make_api_request(query)
-        timeout(configuration.timeout) do
-          uri = URI.parse(query_url(query))
-          client = http_client.new(uri.host, uri.port)
-          client.use_ssl = true if configuration.use_https
-          client.get(uri.request_uri, configuration.http_headers)
-        end
+        request = EventMachine::HttpRequest.new(query_url(query)).get :head => configuration.http_headers 
+        return request
       end
 
       def check_api_key_configuration!(query)
